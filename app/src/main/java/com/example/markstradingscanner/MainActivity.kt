@@ -6,15 +6,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -31,13 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.markstradingscanner.ui.theme.MarksTradingScannerTheme
-import java.net.HttpURLConnection
-import java.net.URL
 import java.text.NumberFormat
 import java.util.Locale
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,59 +40,21 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MarksTradingScannerTheme {
-                ScannerDashboardScreen()
+                DashboardScreen()
             }
         }
     }
 }
 
-data class SystemStatus(
-    val status: String,
-    val executionMode: String,
-    val marketSession: String,
-    val scanningSession: Boolean,
-    val scannerIntervalSeconds: Int,
-    val latestScanId: Int?,
-    val latestScanStatus: String?,
-    val candidatesFound: Int?,
-    val alertsSent: Int?,
-    val brokerConnected: Boolean,
-    val brokerHealthy: Boolean,
-    val brokerMessage: String,
-)
-
-data class AccountSummary(
-    val status: String,
-    val currency: String,
-    val cash: Double,
-    val buyingPower: Double,
-    val equity: Double,
-    val portfolioValue: Double,
-    val lastEquity: Double,
-    val longMarketValue: Double,
-    val patternDayTrader: Boolean,
-    val tradingBlocked: Boolean,
-)
-
-data class DashboardData(
-    val system: SystemStatus,
-    val account: AccountSummary,
-)
-
-data class MetricRow(
-    val label: String,
-    val value: String,
-)
-
 @Composable
-fun ScannerDashboardScreen() {
-    var dashboardData by remember {
+private fun DashboardScreen() {
+    var dashboard by remember {
         mutableStateOf<DashboardData?>(null)
     }
     var loading by remember {
         mutableStateOf(true)
     }
-    var errorText by remember {
+    var error by remember {
         mutableStateOf<String?>(null)
     }
     var refreshRequest by remember {
@@ -107,12 +63,12 @@ fun ScannerDashboardScreen() {
 
     LaunchedEffect(refreshRequest) {
         loading = true
-        errorText = null
+        error = null
 
         try {
-            dashboardData = loadDashboardData()
+            dashboard = ScannerApiClient.loadDashboard()
         } catch (exception: Exception) {
-            errorText = exception.message ?: "Unknown connection error"
+            error = exception.message ?: "Unknown connection error"
         } finally {
             loading = false
         }
@@ -126,12 +82,11 @@ fun ScannerDashboardScreen() {
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
                 Column(
-                    modifier = Modifier.padding(top = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(top = 18.dp),
                 ) {
                     Text(
                         text = "Mark's Trading Scanner",
@@ -140,7 +95,7 @@ fun ScannerDashboardScreen() {
                     )
 
                     Text(
-                        text = "Mobile Dashboard",
+                        text = "Mobile Trading Dashboard",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -154,10 +109,10 @@ fun ScannerDashboardScreen() {
                     }
                 }
 
-                errorText != null -> {
+                error != null -> {
                     item {
                         ErrorCard(
-                            message = errorText ?: "Unknown error",
+                            message = error ?: "Unknown error",
                             onRetry = {
                                 refreshRequest += 1
                             },
@@ -165,11 +120,11 @@ fun ScannerDashboardScreen() {
                     }
                 }
 
-                dashboardData != null -> {
-                    val data = dashboardData!!
+                dashboard != null -> {
+                    val data = dashboard!!
 
                     item {
-                        StatusCard(data.system)
+                        SystemCard(data.system)
                     }
 
                     item {
@@ -177,11 +132,23 @@ fun ScannerDashboardScreen() {
                     }
 
                     item {
-                        ScannerCard(data.system)
+                        PerformanceCard(data.performance)
                     }
 
                     item {
-                        BrokerCard(data.system)
+                        PositionsCard(data.positions)
+                    }
+
+                    item {
+                        OrdersCard(data.orders)
+                    }
+
+                    item {
+                        ScannerResultsCard(data.scannerResults)
+                    }
+
+                    item {
+                        RecentTradesCard(data.trades)
                     }
 
                     item {
@@ -191,7 +158,7 @@ fun ScannerDashboardScreen() {
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Refresh Dashboard")
+                            Text("Refresh All Data")
                         }
                     }
                 }
@@ -199,7 +166,7 @@ fun ScannerDashboardScreen() {
 
             item {
                 Text(
-                    text = "Connected securely through Tailscale",
+                    text = "Secure connection through Tailscale",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 24.dp),
@@ -222,13 +189,12 @@ private fun LoadingCard() {
 
             Column {
                 Text(
-                    text = "Connecting to scanner",
+                    text = "Loading dashboard",
                     style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
                 )
-                Text(
-                    text = "Loading system and account data...",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+
+                Text("Connecting to scanner and broker...")
             }
         }
     }
@@ -241,9 +207,6 @@ private fun ErrorCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-        ),
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
@@ -253,13 +216,9 @@ private fun ErrorCard(
                 text = "Connection failed",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onErrorContainer,
             )
 
-            Text(
-                text = message,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-            )
+            Text(message)
 
             Button(onClick = onRetry) {
                 Text("Try Again")
@@ -269,158 +228,335 @@ private fun ErrorCard(
 }
 
 @Composable
-private fun StatusCard(system: SystemStatus) {
-    val scannerOnline = system.status.equals(
-        other = "ok",
-        ignoreCase = true,
-    )
-
-    val overallHealthy = (
-        scannerOnline &&
-            system.brokerConnected &&
-            system.brokerHealthy
-        )
-
-    DashboardCard(
+private fun SystemCard(system: SystemStatus) {
+    SectionCard(
         title = "System Status",
-        metrics = listOf(
-            MetricRow(
-                label = "Overall",
-                value = if (overallHealthy) "ONLINE" else "ATTENTION",
-            ),
-            MetricRow(
-                label = "Scanner API",
-                value = if (scannerOnline) "ONLINE" else "OFFLINE",
-            ),
-            MetricRow(
-                label = "Broker",
-                value = if (system.brokerConnected) {
-                    "CONNECTED"
-                } else {
-                    "DISCONNECTED"
-                },
-            ),
-            MetricRow(
-                label = "Broker health",
-                value = if (system.brokerHealthy) {
-                    "HEALTHY"
-                } else {
-                    "UNHEALTHY"
-                },
-            ),
-        ),
-    )
+    ) {
+        DashboardMetric(
+            "Scanner API",
+            if (system.status.equals("ok", true)) {
+                "ONLINE"
+            } else {
+                "OFFLINE"
+            },
+        )
+        DashboardMetric(
+            "Broker",
+            if (system.brokerConnected) {
+                "CONNECTED"
+            } else {
+                "DISCONNECTED"
+            },
+        )
+        DashboardMetric(
+            "Broker health",
+            if (system.brokerHealthy) "HEALTHY" else "UNHEALTHY",
+        )
+        DashboardMetric(
+            "Market session",
+            displayText(system.marketSession),
+        )
+        DashboardMetric(
+            "Execution mode",
+            displayText(system.executionMode),
+        )
+        DashboardMetric(
+            "Latest scan",
+            system.latestScanId?.let { "#$it" } ?: "Unavailable",
+        )
+        DashboardMetric(
+            "Scan status",
+            system.latestScanStatus?.let(::displayText)
+                ?: "Unavailable",
+        )
+        DashboardMetric(
+            "Candidates",
+            system.candidatesFound?.toString() ?: "Unavailable",
+        )
+    }
 }
 
 @Composable
 private fun AccountCard(account: AccountSummary) {
-    DashboardCard(
+    SectionCard(
         title = "Account",
-        metrics = listOf(
-            MetricRow(
-                label = "Equity",
-                value = formatCurrency(account.equity),
-            ),
-            MetricRow(
-                label = "Cash",
-                value = formatCurrency(account.cash),
-            ),
-            MetricRow(
-                label = "Buying power",
-                value = formatCurrency(account.buyingPower),
-            ),
-            MetricRow(
-                label = "Portfolio value",
-                value = formatCurrency(account.portfolioValue),
-            ),
-            MetricRow(
-                label = "Long market value",
-                value = formatCurrency(account.longMarketValue),
-            ),
-            MetricRow(
-                label = "Account status",
-                value = account.status.uppercase(),
-            ),
-        ),
-    )
+    ) {
+        DashboardMetric(
+            "Equity",
+            formatCurrency(account.equity),
+        )
+        DashboardMetric(
+            "Cash",
+            formatCurrency(account.cash),
+        )
+        DashboardMetric(
+            "Buying power",
+            formatCurrency(account.buyingPower),
+        )
+        DashboardMetric(
+            "Portfolio value",
+            formatCurrency(account.portfolioValue),
+        )
+        DashboardMetric(
+            "Long market value",
+            formatCurrency(account.longMarketValue),
+        )
+        DashboardMetric(
+            "Status",
+            displayText(account.status),
+        )
+    }
 }
 
 @Composable
-private fun ScannerCard(system: SystemStatus) {
-    DashboardCard(
-        title = "Scanner",
-        metrics = listOf(
-            MetricRow(
-                label = "Market session",
-                value = displayText(system.marketSession),
-            ),
-            MetricRow(
-                label = "Execution mode",
-                value = displayText(system.executionMode),
-            ),
-            MetricRow(
-                label = "Scanning session",
-                value = if (system.scanningSession) "ACTIVE" else "INACTIVE",
-            ),
-            MetricRow(
-                label = "Scan interval",
-                value = "${system.scannerIntervalSeconds} seconds",
-            ),
-            MetricRow(
-                label = "Latest scan",
-                value = system.latestScanId?.let { "#$it" } ?: "Unavailable",
-            ),
-            MetricRow(
-                label = "Scan status",
-                value = system.latestScanStatus?.let(::displayText)
-                    ?: "Unavailable",
-            ),
-            MetricRow(
-                label = "Candidates",
-                value = system.candidatesFound?.toString() ?: "Unavailable",
-            ),
-            MetricRow(
-                label = "Alerts sent",
-                value = system.alertsSent?.toString() ?: "Unavailable",
-            ),
-        ),
-    )
+private fun PerformanceCard(
+    performance: PerformanceSummary,
+) {
+    SectionCard(
+        title = "Performance",
+    ) {
+        DashboardMetric(
+            "Total realized P/L",
+            formatCurrency(performance.totalRealizedPl),
+        )
+        DashboardMetric(
+            "Win rate",
+            formatPercent(performance.winRate),
+        )
+        DashboardMetric(
+            "Average return",
+            formatPercent(performance.averageReturn),
+        )
+        DashboardMetric(
+            "Total trades",
+            performance.totalTrades.toString(),
+        )
+        DashboardMetric(
+            "Open trades",
+            performance.openTrades.toString(),
+        )
+        DashboardMetric(
+            "Closed trades",
+            performance.closedTrades.toString(),
+        )
+        DashboardMetric(
+            "Winners / Losers",
+            "${performance.winners} / ${performance.losers}",
+        )
+    }
 }
 
 @Composable
-private fun BrokerCard(system: SystemStatus) {
-    DashboardCard(
-        title = "Broker",
-        metrics = listOf(
-            MetricRow(
-                label = "Connected",
-                value = if (system.brokerConnected) "YES" else "NO",
-            ),
-            MetricRow(
-                label = "Healthy",
-                value = if (system.brokerHealthy) "YES" else "NO",
-            ),
-            MetricRow(
-                label = "Message",
-                value = system.brokerMessage.ifBlank {
-                    "No broker message"
-                },
-            ),
-        ),
-    )
+private fun PositionsCard(
+    positions: List<PositionSummary>,
+) {
+    SectionCard(
+        title = "Open Positions (${positions.size})",
+    ) {
+        if (positions.isEmpty()) {
+            Text("No open positions")
+        } else {
+            positions.forEachIndexed { index, position ->
+                Text(
+                    text = position.symbol,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+
+                DashboardMetric(
+                    "Side / Quantity",
+                    "${displayText(position.side)} / ${formatQuantity(position.quantity)}",
+                )
+                DashboardMetric(
+                    "Entry",
+                    formatCurrency(position.entryPrice),
+                )
+                DashboardMetric(
+                    "Current",
+                    formatCurrency(position.currentPrice),
+                )
+                DashboardMetric(
+                    "Market value",
+                    formatCurrency(position.marketValue),
+                )
+                DashboardMetric(
+                    "Unrealized P/L",
+                    formatSignedCurrency(position.unrealizedPl),
+                )
+                DashboardMetric(
+                    "Change today",
+                    formatPercent(position.changeToday * 100),
+                )
+
+                if (index < positions.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
-private fun DashboardCard(
+private fun OrdersCard(
+    orders: List<OrderSummary>,
+) {
+    SectionCard(
+        title = "Open Orders (${orders.size})",
+    ) {
+        if (orders.isEmpty()) {
+            Text("No open orders")
+        } else {
+            orders.forEachIndexed { index, order ->
+                Text(
+                    text = order.symbol,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+
+                DashboardMetric(
+                    "Side / Type",
+                    "${displayText(order.side)} / ${displayText(order.orderType)}",
+                )
+                DashboardMetric(
+                    "Quantity",
+                    formatQuantity(order.quantity),
+                )
+                DashboardMetric(
+                    "Filled",
+                    formatQuantity(order.filledQuantity),
+                )
+                DashboardMetric(
+                    "Status",
+                    displayText(order.status),
+                )
+
+                if (index < orders.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScannerResultsCard(
+    results: List<ScannerResult>,
+) {
+    SectionCard(
+        title = "Latest Scanner Results",
+    ) {
+        if (results.isEmpty()) {
+            Text("No scanner results available")
+        } else {
+            results.forEachIndexed { index, result ->
+                Text(
+                    text = "${result.rank ?: index + 1}. ${result.ticker}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+
+                DashboardMetric(
+                    "Price",
+                    formatCurrency(result.price),
+                )
+                DashboardMetric(
+                    "AI score",
+                    result.score.format(1),
+                )
+                DashboardMetric(
+                    "Gain",
+                    formatPercent(result.gainPercent),
+                )
+                DashboardMetric(
+                    "RVOL",
+                    result.rvol.format(2),
+                )
+                DashboardMetric(
+                    "Alert qualified",
+                    if (result.alertQualified) "YES" else "NO",
+                )
+
+                if (index < results.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentTradesCard(
+    trades: List<TradeSummary>,
+) {
+    SectionCard(
+        title = "Recent Trades (${trades.size})",
+    ) {
+        if (trades.isEmpty()) {
+            Text("No recent trades")
+        } else {
+            trades.forEachIndexed { index, trade ->
+                Text(
+                    text = trade.ticker,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+
+                DashboardMetric(
+                    "Entry",
+                    formatCurrency(trade.entryPrice),
+                )
+                DashboardMetric(
+                    "Exit",
+                    trade.exitPrice?.let(::formatCurrency)
+                        ?: "Unavailable",
+                )
+                DashboardMetric(
+                    "Realized P/L",
+                    trade.realizedPl?.let(::formatSignedCurrency)
+                        ?: "Unavailable",
+                )
+                DashboardMetric(
+                    "Return",
+                    trade.realizedPlPercent?.let(::formatPercent)
+                        ?: "Unavailable",
+                )
+                DashboardMetric(
+                    "Exit reason",
+                    trade.exitReason?.let(::displayText)
+                        ?: "Unavailable",
+                )
+                DashboardMetric(
+                    "Mode",
+                    displayText(trade.executionMode),
+                )
+
+                if (index < trades.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionCard(
     title: String,
-    metrics: List<MetricRow>,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
         ) {
             Text(
                 text = title,
@@ -430,178 +566,60 @@ private fun DashboardCard(
 
             HorizontalDivider()
 
-            metrics.forEachIndexed { index, metric ->
-                MetricLine(metric)
-
-                if (index < metrics.lastIndex) {
-                    HorizontalDivider()
-                }
-            }
+            content()
         }
     }
 }
 
 @Composable
-private fun MetricLine(metric: MetricRow) {
+private fun DashboardMetric(
+    label: String,
+    value: String,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
-            text = metric.label,
-            style = MaterialTheme.typography.bodyMedium,
+            text = label,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
 
         Text(
-            text = metric.value,
-            style = MaterialTheme.typography.bodyMedium,
+            text = value,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.weight(1f),
         )
     }
 }
 
-private suspend fun loadDashboardData(): DashboardData =
-    withContext(Dispatchers.IO) {
-        val systemJson = requestJson("/system/status")
-        val accountJson = requestJson("/account")
-
-        DashboardData(
-            system = parseSystemStatus(systemJson),
-            account = parseAccountSummary(accountJson),
-        )
-    }
-
-private fun requestJson(path: String): JSONObject {
-    val baseUrl = BuildConfig.MOBILE_API_BASE_URL.trimEnd('/')
-    val apiKey = BuildConfig.MOBILE_API_KEY
-
-    require(baseUrl.isNotBlank()) {
-        "MOBILE_API_BASE_URL is not configured."
-    }
-
-    require(apiKey.isNotBlank()) {
-        "MOBILE_API_KEY is not configured."
-    }
-
-    val connection = (
-        URL("$baseUrl$path").openConnection()
-            as HttpURLConnection
-        )
-
-    try {
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 10_000
-        connection.readTimeout = 10_000
-        connection.setRequestProperty(
-            "X-API-Key",
-            apiKey,
-        )
-
-        val responseCode = connection.responseCode
-
-        if (responseCode !in 200..299) {
-            val errorBody = connection.errorStream
-                ?.bufferedReader()
-                ?.use { it.readText() }
-                .orEmpty()
-
-            error(
-                "API returned HTTP $responseCode for $path. $errorBody"
-            )
-        }
-
-        val responseBody = connection.inputStream
-            .bufferedReader()
-            .use { it.readText() }
-
-        return JSONObject(responseBody)
-    } finally {
-        connection.disconnect()
-    }
-}
-
-private fun parseSystemStatus(json: JSONObject): SystemStatus {
-    val latestScan = json.optJSONObject("latest_scan")
-    val broker = json.optJSONObject("broker")
-
-    return SystemStatus(
-        status = json.optString("status", "unknown"),
-        executionMode = json.optString(
-            "execution_mode",
-            "unknown",
-        ),
-        marketSession = json.optString(
-            "market_session",
-            "unknown",
-        ),
-        scanningSession = json.optBoolean(
-            "scanning_session",
-            false,
-        ),
-        scannerIntervalSeconds = json.optInt(
-            "scanner_interval_seconds",
-            0,
-        ),
-        latestScanId = latestScan?.optInt("id"),
-        latestScanStatus = latestScan?.optString(
-            "status",
-            "unknown",
-        ),
-        candidatesFound = latestScan?.optInt(
-            "candidates_found",
-        ),
-        alertsSent = latestScan?.optInt(
-            "alerts_sent",
-        ),
-        brokerConnected = broker?.optBoolean(
-            "connected",
-            false,
-        ) ?: false,
-        brokerHealthy = broker?.optBoolean(
-            "healthy",
-            false,
-        ) ?: false,
-        brokerMessage = broker?.optString(
-            "message",
-            "",
-        ).orEmpty(),
-    )
-}
-
-private fun parseAccountSummary(json: JSONObject): AccountSummary {
-    return AccountSummary(
-        status = json.optString("status", "unknown"),
-        currency = json.optString("currency", "USD"),
-        cash = json.optDouble("cash", 0.0),
-        buyingPower = json.optDouble("buying_power", 0.0),
-        equity = json.optDouble("equity", 0.0),
-        portfolioValue = json.optDouble(
-            "portfolio_value",
-            0.0,
-        ),
-        lastEquity = json.optDouble("last_equity", 0.0),
-        longMarketValue = json.optDouble(
-            "long_market_value",
-            0.0,
-        ),
-        patternDayTrader = json.optBoolean(
-            "pattern_day_trader",
-            false,
-        ),
-        tradingBlocked = json.optBoolean(
-            "trading_blocked",
-            false,
-        ),
-    )
-}
-
 private fun formatCurrency(value: Double): String {
     return NumberFormat.getCurrencyInstance(
         Locale.US,
     ).format(value)
+}
+
+private fun formatSignedCurrency(value: Double): String {
+    val formatted = formatCurrency(kotlin.math.abs(value))
+
+    return when {
+        value > 0 -> "+$formatted"
+        value < 0 -> "-$formatted"
+        else -> formatted
+    }
+}
+
+private fun formatPercent(value: Double): String {
+    return "${value.format(2)}%"
+}
+
+private fun formatQuantity(value: Double): String {
+    return if (value % 1.0 == 0.0) {
+        value.toInt().toString()
+    } else {
+        value.format(4)
+    }
 }
 
 private fun displayText(value: String): String {
@@ -611,4 +629,12 @@ private fun displayText(value: String): String {
         .replaceFirstChar { character ->
             character.titlecase(Locale.US)
         }
+}
+
+private fun Double.format(decimals: Int): String {
+    return String.format(
+        Locale.US,
+        "%.${decimals}f",
+        this,
+    )
 }

@@ -1,0 +1,89 @@
+package com.example.markstradingscanner
+
+data class SystemStatus(
+    val status: String,
+    val executionMode: String,
+    val marketSession: String,
+    val scanningSession: Boolean,
+    val scannerIntervalSeconds: Int,
+    val latestScanId: Int?,
+    val latestScanStatus: String?,
+    val candidatesFound: Int?,
+    val alertsSent: Int?,
+    val brokerConnected: Boolean,
+    val brokerHealthy: Boolean,
+    val brokerMessage: String,
+)
+
+data class AccountSummary(
+    val status: String,
+    val cash: Double,
+    val buyingPower: Double,
+    val equity: Double,
+    val portfolioValue: Double,
+    val longMarketValue: Double,
+)
+
+data class PositionSummary(
+    val symbol: String,
+    val side: String,
+    val quantity: Double,
+    val entryPrice: Double,
+    val currentPrice: Double,
+    val marketValue: Double,
+    val unrealizedPl: Double,
+    val changeToday: Double,
+)
+
+data class OrderSummary(
+    val symbol: String,
+    val side: String,
+    val orderType: String,
+    val quantity: Double,
+    val filledQuantity: Double,
+    val status: String,
+    val submittedAt: String?,
+)
+
+data class ScannerResult(
+    val rank: Int?,
+    val ticker: String,
+    val price: Double,
+    val score: Double,
+    val gainPercent: Double,
+    val rvol: Double,
+    val alertQualified: Boolean,
+)
+
+data class TradeSummary(
+    val id: Int,
+    val ticker: String,
+    val entryPrice: Double,
+    val exitPrice: Double?,
+    val realizedPl: Double?,
+    val realizedPlPercent: Double?,
+    val exitReason: String?,
+    val exitTime: String?,
+    val executionMode: String,
+)
+
+data class PerformanceSummary(
+    val totalTrades: Int,
+    val openTrades: Int,
+    val closedTrades: Int,
+    val winners: Int,
+    val losers: Int,
+    val winRate: Double,
+    val totalRealizedPl: Double,
+    val averageReturn: Double,
+)
+
+data class DashboardData(
+    val system: SystemStatus,
+    val account: AccountSummary,
+    val positions: List<PositionSummary>,
+    val orders: List<OrderSummary>,
+    val scannerResults: List<ScannerResult>,
+    val trades: List<TradeSummary>,
+    val performance: PerformanceSummary,
+)
