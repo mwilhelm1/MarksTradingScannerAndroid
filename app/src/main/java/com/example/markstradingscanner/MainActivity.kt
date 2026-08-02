@@ -1,4 +1,4 @@
-package com.example.markstradingscanner
+﻿package com.example.markstradingscanner
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -56,7 +56,7 @@ private fun TradingScannerApp() {
     val position = selectedPosition
 
     if (position == null) {
-        DashboardScreen(
+        HomeScreen(
             onPositionSelected = {
                 selectedPosition = it
             },
@@ -77,7 +77,7 @@ private fun TradingScannerApp() {
 
 
 @Composable
-private fun DashboardScreen(
+private fun HomeScreen(
     onPositionSelected: (PositionSummary) -> Unit,
 ) {
     var dashboard by remember {
@@ -962,3 +962,4 @@ private fun Double.format(decimals: Int): String {
         this,
     )
 }
+
