@@ -1,4 +1,4 @@
-package com.example.markstradingscanner
+﻿package com.example.markstradingscanner
 
 import java.net.HttpURLConnection
 import java.net.URL
@@ -486,3 +486,4 @@ private fun JSONObject.nullableDouble(
 
     return optDouble(name)
 }
+
