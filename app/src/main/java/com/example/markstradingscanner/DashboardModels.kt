@@ -33,6 +33,19 @@ data class PositionSummary(
     val marketValue: Double,
     val unrealizedPl: Double,
     val changeToday: Double,
+
+    val localTradeId: Int?,
+    val stopPrice: Double?,
+    val targetPrice: Double?,
+    val riskAmount: Double?,
+    val riskPerShare: Double?,
+    val score: Double?,
+    val stopMethod: String?,
+    val targetMethod: String?,
+    val rewardToRisk: Double?,
+    val plannedStopDistancePercent: Double?,
+    val tradePlanVersion: String?,
+    val brokerStatus: String?,
 )
 
 data class OrderSummary(

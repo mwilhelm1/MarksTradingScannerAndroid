@@ -194,6 +194,101 @@ object ScannerApiClient {
                             "change_today",
                             0.0,
                         ),
+
+                        localTradeId = (
+                            if (item.isNull("local_trade_id")) {
+                                null
+                            } else {
+                                item.optInt("local_trade_id")
+                            }
+                        ),
+                        stopPrice = (
+                            if (item.isNull("stop_price")) {
+                                null
+                            } else {
+                                item.optDouble("stop_price")
+                            }
+                        ),
+                        targetPrice = (
+                            if (item.isNull("target_price")) {
+                                null
+                            } else {
+                                item.optDouble("target_price")
+                            }
+                        ),
+                        riskAmount = (
+                            if (item.isNull("risk_amount")) {
+                                null
+                            } else {
+                                item.optDouble("risk_amount")
+                            }
+                        ),
+                        riskPerShare = (
+                            if (item.isNull("risk_per_share")) {
+                                null
+                            } else {
+                                item.optDouble("risk_per_share")
+                            }
+                        ),
+                        score = (
+                            if (item.isNull("score")) {
+                                null
+                            } else {
+                                item.optDouble("score")
+                            }
+                        ),
+                        stopMethod = (
+                            if (item.isNull("stop_method")) {
+                                null
+                            } else {
+                                item.optString("stop_method")
+                                    .takeIf { it.isNotBlank() }
+                            }
+                        ),
+                        targetMethod = (
+                            if (item.isNull("target_method")) {
+                                null
+                            } else {
+                                item.optString("target_method")
+                                    .takeIf { it.isNotBlank() }
+                            }
+                        ),
+                        rewardToRisk = (
+                            if (item.isNull("reward_to_risk")) {
+                                null
+                            } else {
+                                item.optDouble("reward_to_risk")
+                            }
+                        ),
+                        plannedStopDistancePercent = (
+                            if (
+                                item.isNull(
+                                    "planned_stop_distance_percent"
+                                )
+                            ) {
+                                null
+                            } else {
+                                item.optDouble(
+                                    "planned_stop_distance_percent"
+                                )
+                            }
+                        ),
+                        tradePlanVersion = (
+                            if (item.isNull("trade_plan_version")) {
+                                null
+                            } else {
+                                item.optString("trade_plan_version")
+                                    .takeIf { it.isNotBlank() }
+                            }
+                        ),
+                        brokerStatus = (
+                            if (item.isNull("broker_status")) {
+                                null
+                            } else {
+                                item.optString("broker_status")
+                                    .takeIf { it.isNotBlank() }
+                            }
+                        ),
                     )
                 )
             }

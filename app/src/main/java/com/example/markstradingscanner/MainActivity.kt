@@ -2,6 +2,7 @@ package com.example.markstradingscanner
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
@@ -40,14 +41,45 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MarksTradingScannerTheme {
-                DashboardScreen()
+                TradingScannerApp()
             }
         }
     }
 }
 
 @Composable
-private fun DashboardScreen() {
+private fun TradingScannerApp() {
+    var selectedPosition by remember {
+        mutableStateOf<PositionSummary?>(null)
+    }
+
+    val position = selectedPosition
+
+    if (position == null) {
+        DashboardScreen(
+            onPositionSelected = {
+                selectedPosition = it
+            },
+        )
+    } else {
+        BackHandler {
+            selectedPosition = null
+        }
+
+        TradeDetailScreen(
+            position = position,
+            onBack = {
+                selectedPosition = null
+            },
+        )
+    }
+}
+
+
+@Composable
+private fun DashboardScreen(
+    onPositionSelected: (PositionSummary) -> Unit,
+) {
     var dashboard by remember {
         mutableStateOf<DashboardData?>(null)
     }
@@ -136,7 +168,10 @@ private fun DashboardScreen() {
                     }
 
                     item {
-                        PositionsCard(data.positions)
+                        PositionsCard(
+                            positions = data.positions,
+                            onPositionSelected = onPositionSelected,
+                        )
                     }
 
                     item {
@@ -175,6 +210,207 @@ private fun DashboardScreen() {
         }
     }
 }
+
+@Composable
+private fun TradeDetailScreen(
+    position: PositionSummary,
+    onBack: () -> Unit,
+) {
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item {
+                Column(
+                    modifier = Modifier.padding(top = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = position.symbol,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+
+                    Text(
+                        text = "Trade Detail",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    Button(
+                        onClick = onBack,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Back to Dashboard")
+                    }
+                }
+            }
+
+            item {
+                SectionCard(
+                    title = "Live Position",
+                ) {
+                    DashboardMetric(
+                        "Side",
+                        displayText(position.side),
+                    )
+                    DashboardMetric(
+                        "Quantity",
+                        formatQuantity(position.quantity),
+                    )
+                    DashboardMetric(
+                        "Entry",
+                        formatCurrency(position.entryPrice),
+                    )
+                    DashboardMetric(
+                        "Current",
+                        formatCurrency(position.currentPrice),
+                    )
+                    DashboardMetric(
+                        "Market value",
+                        formatCurrency(position.marketValue),
+                    )
+                    DashboardMetric(
+                        "Unrealized P/L",
+                        formatSignedCurrency(position.unrealizedPl),
+                    )
+                    DashboardMetric(
+                        "Change today",
+                        formatPercent(position.changeToday * 100),
+                    )
+                }
+            }
+
+            item {
+                SectionCard(
+                    title = "Trade Plan",
+                ) {
+                    position.score?.let {
+                        DashboardMetric(
+                            "AI score",
+                            it.format(1),
+                        )
+                    }
+
+                    position.stopPrice?.let {
+                        DashboardMetric(
+                            "Stop",
+                            formatCurrency(it),
+                        )
+                    }
+
+                    position.targetPrice?.let {
+                        DashboardMetric(
+                            "Target",
+                            formatCurrency(it),
+                        )
+                    }
+
+                    position.riskAmount?.let {
+                        DashboardMetric(
+                            "Planned risk",
+                            formatCurrency(it),
+                        )
+                    }
+
+                    position.riskPerShare?.let {
+                        DashboardMetric(
+                            "Risk per share",
+                            formatCurrency(it),
+                        )
+                    }
+
+                    position.rewardToRisk?.let {
+                        DashboardMetric(
+                            "Reward / Risk",
+                            it.format(2),
+                        )
+                    }
+
+                    position.plannedStopDistancePercent?.let {
+                        DashboardMetric(
+                            "Stop distance",
+                            formatPercent(it),
+                        )
+                    }
+
+                    position.stopMethod?.let {
+                        DashboardMetric(
+                            "Stop method",
+                            displayText(it),
+                        )
+                    }
+
+                    position.targetMethod?.let {
+                        DashboardMetric(
+                            "Target method",
+                            displayText(it),
+                        )
+                    }
+
+                    position.tradePlanVersion?.let {
+                        DashboardMetric(
+                            "Plan version",
+                            it,
+                        )
+                    }
+
+                    if (
+                        position.stopMethod == null
+                        && position.targetMethod == null
+                        && position.tradePlanVersion == null
+                    ) {
+                        Text(
+                            text = (
+                                "Planning-method details are unavailable "
+                                + "for this older position."
+                            ),
+                            color = (
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                        )
+                    }
+                }
+            }
+
+            item {
+                SectionCard(
+                    title = "Broker Record",
+                ) {
+                    position.localTradeId?.let {
+                        DashboardMetric(
+                            "Local trade ID",
+                            it.toString(),
+                        )
+                    }
+
+                    position.brokerStatus?.let {
+                        DashboardMetric(
+                            "Broker status",
+                            displayText(it),
+                        )
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    text = "Secure connection through Tailscale",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 24.dp),
+                )
+            }
+        }
+    }
+}
+
 
 @Composable
 private fun LoadingCard() {
@@ -349,6 +585,7 @@ private fun PerformanceCard(
 @Composable
 private fun PositionsCard(
     positions: List<PositionSummary>,
+    onPositionSelected: (PositionSummary) -> Unit,
 ) {
     SectionCard(
         title = "Open Positions (${positions.size})",
@@ -387,6 +624,93 @@ private fun PositionsCard(
                     "Change today",
                     formatPercent(position.changeToday * 100),
                 )
+
+                position.score?.let { score ->
+                    DashboardMetric(
+                        "AI score",
+                        score.format(1),
+                    )
+                }
+
+                position.stopPrice?.let { stopPrice ->
+                    DashboardMetric(
+                        "Stop",
+                        formatCurrency(stopPrice),
+                    )
+                }
+
+                position.targetPrice?.let { targetPrice ->
+                    DashboardMetric(
+                        "Target",
+                        formatCurrency(targetPrice),
+                    )
+                }
+
+                position.riskAmount?.let { riskAmount ->
+                    DashboardMetric(
+                        "Planned risk",
+                        formatCurrency(riskAmount),
+                    )
+                }
+
+                position.riskPerShare?.let { riskPerShare ->
+                    DashboardMetric(
+                        "Risk per share",
+                        formatCurrency(riskPerShare),
+                    )
+                }
+
+                position.rewardToRisk?.let { rewardToRisk ->
+                    DashboardMetric(
+                        "Reward / Risk",
+                        rewardToRisk.format(2),
+                    )
+                }
+
+                position.plannedStopDistancePercent?.let {
+                    stopDistance ->
+                    DashboardMetric(
+                        "Stop distance",
+                        formatPercent(stopDistance),
+                    )
+                }
+
+                position.stopMethod?.let { stopMethod ->
+                    DashboardMetric(
+                        "Stop method",
+                        displayText(stopMethod),
+                    )
+                }
+
+                position.targetMethod?.let { targetMethod ->
+                    DashboardMetric(
+                        "Target method",
+                        displayText(targetMethod),
+                    )
+                }
+
+                position.brokerStatus?.let { brokerStatus ->
+                    DashboardMetric(
+                        "Broker status",
+                        displayText(brokerStatus),
+                    )
+                }
+
+                position.tradePlanVersion?.let { version ->
+                    DashboardMetric(
+                        "Trade plan",
+                        "Version $version",
+                    )
+                }
+
+                Button(
+                    onClick = {
+                        onPositionSelected(position)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("View ${position.symbol} Details")
+                }
 
                 if (index < positions.lastIndex) {
                     HorizontalDivider(
