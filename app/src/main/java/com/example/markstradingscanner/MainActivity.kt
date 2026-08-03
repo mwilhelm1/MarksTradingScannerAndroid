@@ -870,96 +870,12 @@ private fun RecentTradesCard(
     }
 }
 
-@Composable
-private fun SectionCard(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-            )
 
-            HorizontalDivider()
 
-            content()
-        }
-    }
-}
 
-@Composable
-private fun DashboardMetric(
-    label: String,
-    value: String,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = label,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
-        )
 
-        Text(
-            text = value,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
 
-private fun formatCurrency(value: Double): String {
-    return NumberFormat.getCurrencyInstance(
-        Locale.US,
-    ).format(value)
-}
 
-private fun formatSignedCurrency(value: Double): String {
-    val formatted = formatCurrency(kotlin.math.abs(value))
 
-    return when {
-        value > 0 -> "+$formatted"
-        value < 0 -> "-$formatted"
-        else -> formatted
-    }
-}
 
-private fun formatPercent(value: Double): String {
-    return "${value.format(2)}%"
-}
-
-private fun formatQuantity(value: Double): String {
-    return if (value % 1.0 == 0.0) {
-        value.toInt().toString()
-    } else {
-        value.format(4)
-    }
-}
-
-private fun displayText(value: String): String {
-    return value
-        .replace("_", " ")
-        .lowercase()
-        .replaceFirstChar { character ->
-            character.titlecase(Locale.US)
-        }
-}
-
-private fun Double.format(decimals: Int): String {
-    return String.format(
-        Locale.US,
-        "%.${decimals}f",
-        this,
-    )
-}
 

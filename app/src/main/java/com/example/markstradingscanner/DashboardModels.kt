@@ -1,4 +1,4 @@
-package com.example.markstradingscanner
+﻿package com.example.markstradingscanner
 
 data class SystemStatus(
     val status: String,
@@ -100,3 +100,5 @@ data class DashboardData(
     val trades: List<TradeSummary>,
     val performance: PerformanceSummary,
 )
+
+
