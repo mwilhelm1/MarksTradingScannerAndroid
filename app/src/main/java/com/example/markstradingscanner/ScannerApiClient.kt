@@ -5,6 +5,7 @@ import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import org.json.JSONArray
 
 object ScannerApiClient {
     suspend fun loadDashboard(): DashboardData =
@@ -31,8 +32,17 @@ object ScannerApiClient {
                 performance = parsePerformance(
                     requestJson("/performance")
                 ),
+                operations = loadOperations(),
             )
         }
+
+    private fun loadOperations(): OperationsResult = try {
+        OperationsResult(status = parseOperations(requestJson("/operations")))
+    } catch (exception: Exception) {
+        OperationsResult(
+            unavailableReason = exception.message ?: "Operations request failed",
+        )
+    }
 
     private fun requestJson(path: String): JSONObject {
         val baseUrl = BuildConfig.MOBILE_API_BASE_URL.trimEnd('/')
@@ -452,6 +462,94 @@ object ScannerApiClient {
                 0.0,
             ),
         )
+    }
+
+    internal fun parseOperations(json: JSONObject): OperationsStatus {
+        val reliability = json.optJSONObject("daily_reliability")
+            ?: error("Operations response omitted daily_reliability")
+        val readiness = json.optJSONObject("trading_readiness")
+            ?: error("Operations response omitted trading_readiness")
+        val trading = json.optJSONObject("trading")
+            ?: error("Operations response omitted trading")
+        val broker = json.optJSONObject("broker")
+            ?: error("Operations response omitted broker")
+        val synchronization = broker.optJSONObject("synchronization_status")
+            ?: error("Operations response omitted reconciliation status")
+
+        val holds = json.optJSONArray("recovery_hold_surveillance")
+            .objects { item ->
+                RecoveryHoldSummary(
+                    tradeId = item.optInt("trade_id"),
+                    ticker = item.optString("ticker", "UNKNOWN"),
+                    holdReason = item.nullableString("hold_reason"),
+                    responsibilityState = item.optString("responsibility_state", "UNKNOWN"),
+                    protectionOwner = item.optString("protection_owner", "UNKNOWN"),
+                    brokerLocalQuantityMatch = item.optBoolean("broker_local_quantity_match"),
+                    hardStopProtectionActive = item.optBoolean("hard_stop_protection_active"),
+                    newEntriesBlocked = item.optBoolean("new_entries_blocked"),
+                    requiresOperatorAction = item.optBoolean("requires_operator_action"),
+                )
+            }
+        val responsibilities = json.optJSONArray("position_responsibilities")
+            .objects { item ->
+                PositionResponsibilitySummary(
+                    tradeId = item.nullableInt("local_trade_id"),
+                    ticker = item.optString("ticker", "UNKNOWN"),
+                    state = item.optString("state", "UNKNOWN"),
+                    protectionOwner = item.optString("protection_owner", "UNKNOWN"),
+                    requiresOperatorAction = item.optBoolean("requires_operator_action"),
+                    blocksNewEntries = item.optBoolean("blocks_new_entries"),
+                )
+            }
+        val globalAction = json.optJSONObject("global_status")
+            ?.optString("status")
+            ?.equals("Operator Action Required", ignoreCase = true) == true
+
+        return OperationsStatus(
+            generatedAt = json.nullableString("generated_at"),
+            dailyReliability = DailyReliabilitySummary(
+                status = reliability.optString("daily_reliability_status", "UNKNOWN"),
+                atRiskReasons = reliability.optJSONArray("at_risk_reasons").strings(),
+                failureReasons = reliability.optJSONArray("failure_reasons").strings(),
+            ),
+            tradingReady = readiness.optBoolean("ready_for_new_entries"),
+            operatorActionRequired = globalAction
+                || holds.any { it.requiresOperatorAction }
+                || responsibilities.any { it.requiresOperatorAction },
+            brokerPositions = trading.optInt("open_positions"),
+            brokerOpenOrders = broker.optInt("open_orders"),
+            reconciliationClean = synchronization.optBoolean("synchronized"),
+            recoveryHolds = holds,
+            responsibilities = responsibilities,
+            postFillRisks = json.optJSONArray("post_fill_excess_risk")
+                .objects { item ->
+                    PostFillRiskSummary(
+                        tradeId = item.nullableInt("trade_id"),
+                        ticker = item.optString("ticker", "UNKNOWN"),
+                        riskAmount = item.optDouble("risk_amount"),
+                        configuredLimit = item.optDouble("configured_limit"),
+                        managementState = item.optString("management_state", "UNKNOWN"),
+                    )
+                },
+        )
+    }
+}
+
+private fun <T> JSONArray?.objects(transform: (JSONObject) -> T): List<T> {
+    if (this == null) return emptyList()
+    return buildList {
+        for (index in 0 until length()) {
+            optJSONObject(index)?.let { add(transform(it)) }
+        }
+    }
+}
+
+private fun JSONArray?.strings(): List<String> {
+    if (this == null) return emptyList()
+    return buildList {
+        for (index in 0 until length()) {
+            optString(index).takeIf { it.isNotBlank() }?.let(::add)
+        }
     }
 }
 

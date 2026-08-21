@@ -1,0 +1,93 @@
+name: Android validation and release
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "android-v*"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+      - name: Test and build debug APK
+        run: ./gradlew testDebugUnitTest assembleDebug
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/android-v')
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/android-release.keystore
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      MOBILE_API_BASE_URL: ${{ vars.MOBILE_API_BASE_URL }}
+      MOBILE_API_KEY: ${{ secrets.MOBILE_API_KEY }}
+      ANDROID_UPDATE_REPOSITORY: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+      - name: Require release configuration
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          EXPECTED_CERT: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
+        run: |
+          test -n "$KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          test -n "$MOBILE_API_BASE_URL"
+          test -n "$MOBILE_API_KEY"
+          test -n "$EXPECTED_CERT"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+      - name: Test and build signed release APK
+        run: ./gradlew testDebugUnitTest assembleRelease
+      - name: Verify package, version, and signer
+        env:
+          EXPECTED_CERT: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
+        run: |
+          APK="app/build/outputs/apk/release/app-release.apk"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          BADGING="$($AAPT dump badging "$APK" | head -1)"
+          echo "$BADGING" | grep "name='com.example.markstradingscanner'"
+          TAG_VERSION="${GITHUB_REF_NAME#android-v}"
+          echo "$BADGING" | grep "versionName='$TAG_VERSION'"
+          $APKSIGNER verify --verbose "$APK"
+          ACTUAL_CERT="$($APKSIGNER verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          test "${ACTUAL_CERT,,}" = "${EXPECTED_CERT,,}"
+          cp "$APK" "marks-trading-scanner-${GITHUB_REF_NAME}.apk"
+          sha256sum "marks-trading-scanner-${GITHUB_REF_NAME}.apk" > "marks-trading-scanner-${GITHUB_REF_NAME}.apk.sha256"
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "marks-trading-scanner-${GITHUB_REF_NAME}.apk" \
+            "marks-trading-scanner-${GITHUB_REF_NAME}.apk.sha256" \
+            --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+      - name: Remove temporary keystore
+        if: always()
+        run: rm -f "$ANDROID_KEYSTORE_PATH"

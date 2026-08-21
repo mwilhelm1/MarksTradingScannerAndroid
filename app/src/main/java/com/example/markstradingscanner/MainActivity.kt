@@ -26,13 +26,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.markstradingscanner.ui.theme.MarksTradingScannerTheme
 import java.text.NumberFormat
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,6 +95,18 @@ private fun HomeScreen(
     var refreshRequest by remember {
         mutableIntStateOf(0)
     }
+    var availableUpdate by remember {
+        mutableStateOf<AvailableUpdate?>(null)
+    }
+    var updateMessage by remember {
+        mutableStateOf<String?>(null)
+    }
+    val context = LocalContext.current
+    val updateScope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        availableUpdate = runCatching { AndroidUpdateManager.check() }.getOrNull()
+    }
 
     LaunchedEffect(refreshRequest) {
         loading = true
@@ -134,6 +149,33 @@ private fun HomeScreen(
                 }
             }
 
+            availableUpdate?.let { update ->
+                item {
+                    UpdateAvailableCard(
+                        update = update,
+                        message = updateMessage,
+                        onUpdate = {
+                            updateScope.launch {
+                                updateMessage = "Downloading update..."
+                                runCatching {
+                                    AndroidUpdateManager.download(context, update)
+                                }.onSuccess { apk ->
+                                    val installerOpened = AndroidUpdateManager
+                                        .launchInstaller(context, apk)
+                                    updateMessage = if (installerOpened) {
+                                        "Android installer opened"
+                                    } else {
+                                        "Allow installs from this app, then tap Update again"
+                                    }
+                                }.onFailure {
+                                    updateMessage = "Update download unavailable"
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+
             when {
                 loading -> {
                     item {
@@ -157,6 +199,10 @@ private fun HomeScreen(
 
                     item {
                         SystemCard(data.system)
+                    }
+
+                    item {
+                        OperationsCard(data.operations)
                     }
 
                     item {
@@ -509,6 +555,124 @@ private fun SystemCard(system: SystemStatus) {
             "Candidates",
             system.candidatesFound?.toString() ?: "Unavailable",
         )
+    }
+}
+
+@Composable
+private fun UpdateAvailableCard(
+    update: AvailableUpdate,
+    message: String?,
+    onUpdate: () -> Unit,
+) {
+    SectionCard(title = "Update Available") {
+        DashboardMetric("Installed", BuildConfig.VERSION_NAME)
+        DashboardMetric("Available", update.versionName)
+        message?.let { Text(it) }
+        Button(
+            onClick = onUpdate,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Update")
+        }
+    }
+}
+
+@Composable
+private fun OperationsCard(result: OperationsResult) {
+    SectionCard(title = "Operations Status") {
+        val operations = result.status
+        if (operations == null) {
+            Text(
+                text = "OPERATIONS UNAVAILABLE / STALE",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Text(
+                text = result.unavailableReason ?: "No current Operations data",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text("CLEAN and READY are not inferred.")
+            return@SectionCard
+        }
+
+        DashboardMetric("Daily Reliability", operations.dailyReliability.status)
+        DashboardMetric("Trading", if (operations.tradingReady) "READY" else "BLOCKED")
+        DashboardMetric(
+            "Operator Action Required",
+            if (operations.operatorActionRequired) "YES" else "NO",
+        )
+        DashboardMetric("Broker Positions", operations.brokerPositions.toString())
+        DashboardMetric("Broker Open Orders", operations.brokerOpenOrders.toString())
+        DashboardMetric(
+            "Reconciliation",
+            if (operations.reconciliationClean) "CLEAN" else "BLOCKED",
+        )
+
+        val reasons = operations.dailyReliability.failureReasons +
+            operations.dailyReliability.atRiskReasons
+        if (reasons.isNotEmpty()) {
+            HorizontalDivider()
+            Text("Reliability reasons", fontWeight = FontWeight.Bold)
+            reasons.forEach { Text("• ${displayText(it)}") }
+        }
+
+        operations.recoveryHolds.forEach { hold ->
+            HorizontalDivider()
+            Text(
+                text = "RECOVERY HOLD — ${hold.ticker}",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.error,
+            )
+            DashboardMetric("Trade ID", hold.tradeId.toString())
+            DashboardMetric("Hold Reason", hold.holdReason ?: "Unavailable")
+            DashboardMetric("Responsibility", displayText(hold.responsibilityState))
+            DashboardMetric("Protection Owner", displayText(hold.protectionOwner))
+            DashboardMetric(
+                "Quantity Match",
+                if (hold.brokerLocalQuantityMatch) "YES" else "NO",
+            )
+            DashboardMetric(
+                "Hard-Stop Protection Active",
+                if (hold.hardStopProtectionActive) "YES" else "NO",
+            )
+            DashboardMetric(
+                "Entry Blocking",
+                if (hold.newEntriesBlocked) "BLOCKED" else "NOT BLOCKED",
+            )
+        }
+
+        val heldTradeIds = operations.recoveryHolds.map { it.tradeId }.toSet()
+        operations.responsibilities
+            .filterNot { it.tradeId in heldTradeIds }
+            .forEach { responsibility ->
+                HorizontalDivider()
+                Text(
+                    text = "POSITION RESPONSIBILITY — ${responsibility.ticker}",
+                    fontWeight = FontWeight.Bold,
+                )
+                DashboardMetric("Responsibility", displayText(responsibility.state))
+                DashboardMetric("Protection Owner", displayText(responsibility.protectionOwner))
+                DashboardMetric(
+                    "Entry Blocking",
+                    if (responsibility.blocksNewEntries) "BLOCKED" else "NOT BLOCKED",
+                )
+            }
+
+        operations.postFillRisks.forEach { risk ->
+            HorizontalDivider()
+            Text(
+                text = "POST-FILL RISK — ${risk.ticker}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.error,
+            )
+            risk.tradeId?.let { DashboardMetric("Trade ID", it.toString()) }
+            DashboardMetric("Risk", formatCurrency(risk.riskAmount))
+            DashboardMetric("Configured Limit", formatCurrency(risk.configuredLimit))
+            DashboardMetric("Management State", displayText(risk.managementState))
+        }
     }
 }
 

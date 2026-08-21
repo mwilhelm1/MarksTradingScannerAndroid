@@ -91,6 +91,59 @@ data class PerformanceSummary(
     val averageReturn: Double,
 )
 
+data class DailyReliabilitySummary(
+    val status: String,
+    val atRiskReasons: List<String>,
+    val failureReasons: List<String>,
+)
+
+data class RecoveryHoldSummary(
+    val tradeId: Int,
+    val ticker: String,
+    val holdReason: String?,
+    val responsibilityState: String,
+    val protectionOwner: String,
+    val brokerLocalQuantityMatch: Boolean,
+    val hardStopProtectionActive: Boolean,
+    val newEntriesBlocked: Boolean,
+    val requiresOperatorAction: Boolean,
+)
+
+data class PositionResponsibilitySummary(
+    val tradeId: Int?,
+    val ticker: String,
+    val state: String,
+    val protectionOwner: String,
+    val requiresOperatorAction: Boolean,
+    val blocksNewEntries: Boolean,
+)
+
+data class PostFillRiskSummary(
+    val tradeId: Int?,
+    val ticker: String,
+    val riskAmount: Double,
+    val configuredLimit: Double,
+    val managementState: String,
+)
+
+data class OperationsStatus(
+    val generatedAt: String?,
+    val dailyReliability: DailyReliabilitySummary,
+    val tradingReady: Boolean,
+    val operatorActionRequired: Boolean,
+    val brokerPositions: Int,
+    val brokerOpenOrders: Int,
+    val reconciliationClean: Boolean,
+    val recoveryHolds: List<RecoveryHoldSummary>,
+    val responsibilities: List<PositionResponsibilitySummary>,
+    val postFillRisks: List<PostFillRiskSummary>,
+)
+
+data class OperationsResult(
+    val status: OperationsStatus? = null,
+    val unavailableReason: String? = null,
+)
+
 data class DashboardData(
     val system: SystemStatus,
     val account: AccountSummary,
@@ -99,6 +152,7 @@ data class DashboardData(
     val scannerResults: List<ScannerResult>,
     val trades: List<TradeSummary>,
     val performance: PerformanceSummary,
+    val operations: OperationsResult,
 )
 
 
