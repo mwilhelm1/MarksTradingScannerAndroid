@@ -78,7 +78,7 @@ jobs:
           TAG_VERSION="${GITHUB_REF_NAME#android-v}"
           echo "$BADGING" | grep "versionName='$TAG_VERSION'"
           $APKSIGNER verify --verbose "$APK"
-          ACTUAL_CERT="$($APKSIGNER verify --print-certs "$APK" | sed -n 's/^[[:space:]]*Signer #1 certificate SHA-256 digest:[[:space:]]*//p' | head -1)"
+          ACTUAL_CERT="$($APKSIGNER verify --print-certs "$APK" 2>&1 | sed -n 's/^[[:space:]]*Signer #1 certificate SHA-256 digest:[[:space:]]*//p' | head -1)"
           test -n "$ACTUAL_CERT"
           test "${ACTUAL_CERT,,}" = "${EXPECTED_CERT,,}"
           cp "$APK" "marks-trading-scanner-${GITHUB_REF_NAME}.apk"
