@@ -78,7 +78,9 @@ jobs:
           TAG_VERSION="${GITHUB_REF_NAME#android-v}"
           echo "$BADGING" | grep "versionName='$TAG_VERSION'"
           $APKSIGNER verify --verbose "$APK"
-          ACTUAL_CERT="$($APKSIGNER verify --print-certs "$APK" 2>&1 | sed -n 's/^[[:space:]]*Signer #1 certificate SHA-256 digest:[[:space:]]*//p' | head -1 | tr -d '[:space:]')"
+          CERT_OUTPUT="$($APKSIGNER verify --print-certs "$APK" 2>&1)"
+          echo "$CERT_OUTPUT"
+          ACTUAL_CERT="$(echo "$CERT_OUTPUT" | sed -n 's/^[[:space:]]*Signer #1 certificate SHA-256 digest:[[:space:]]*//p' | head -1 | tr -d '[:space:]')"
           echo "APK certificate SHA-256: $ACTUAL_CERT"
           [[ "$ACTUAL_CERT" =~ ^[[:xdigit:]]{64}$ ]]
           test "${ACTUAL_CERT,,}" = "${EXPECTED_CERT,,}"
