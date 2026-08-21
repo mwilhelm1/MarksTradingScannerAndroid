@@ -45,3 +45,4 @@ out/
 captures/
 .externalNativeBuild/
 .cxx/
+.local-tools/
