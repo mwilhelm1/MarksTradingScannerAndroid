@@ -33,7 +33,6 @@ jobs:
     permissions:
       contents: write
     env:
-      ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/android-release.keystore
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -51,6 +50,7 @@ jobs:
           cache-provider: basic
       - name: Require release configuration
         env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/android-release.keystore
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           EXPECTED_CERT: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
         run: |
@@ -63,6 +63,8 @@ jobs:
           test -n "$EXPECTED_CERT"
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
       - name: Test and build signed release APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/android-release.keystore
         run: ./gradlew testDebugUnitTest assembleRelease
       - name: Verify package, version, and signer
         env:
@@ -90,4 +92,6 @@ jobs:
             --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
       - name: Remove temporary keystore
         if: always()
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/android-release.keystore
         run: rm -f "$ANDROID_KEYSTORE_PATH"
