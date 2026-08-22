@@ -92,9 +92,62 @@ data class PerformanceSummary(
 )
 
 data class DailyReliabilitySummary(
-    val status: String,
+    val status: String?,
     val atRiskReasons: List<String>,
     val failureReasons: List<String>,
+)
+
+data class CleanTradingDaySummary(
+    val status: String?,
+    val completed: Boolean?,
+    val reasons: List<String>,
+    val tradingImpact: String?,
+    val manualInterventionRequired: Boolean?,
+    val historicalStreakAvailable: Boolean?,
+)
+
+data class TodaySummary(
+    val tradeAttempts: Int?,
+    val filledTrades: Int?,
+    val enteredTrades: Int?,
+    val completedTrades: Int?,
+    val winners: Int?,
+    val losers: Int?,
+    val realizedPl: Double?,
+    val unrealizedPl: Double?,
+    val openPositions: Int?,
+    val brokerOpenOrders: Int?,
+)
+
+data class LatestTradeSummary(
+    val tradeId: Int?,
+    val ticker: String?,
+    val entryTime: String?,
+    val exitTime: String?,
+    val entryPrice: Double?,
+    val exitPrice: Double?,
+    val realizedPl: Double?,
+    val exitReason: String?,
+    val status: String?,
+)
+
+data class ActionableIncidentSummary(
+    val code: String?,
+    val severity: String?,
+    val summary: String?,
+    val operatorActionRequired: Boolean?,
+    val tradingImpact: String?,
+)
+
+data class ComponentHealthSummary(
+    val component: String,
+    val status: String?,
+)
+
+data class EodStatusSummary(
+    val phase: String?,
+    val flatness: String?,
+    val verification: String?,
 )
 
 data class RecoveryHoldSummary(
@@ -128,12 +181,21 @@ data class PostFillRiskSummary(
 
 data class OperationsStatus(
     val generatedAt: String?,
+    val overallStatus: String?,
     val dailyReliability: DailyReliabilitySummary,
-    val tradingReady: Boolean,
-    val operatorActionRequired: Boolean,
-    val brokerPositions: Int,
-    val brokerOpenOrders: Int,
-    val reconciliationClean: Boolean,
+    val cleanTradingDay: CleanTradingDaySummary?,
+    val todaySummary: TodaySummary?,
+    val latestTrade: LatestTradeSummary?,
+    val actionableIncidents: List<ActionableIncidentSummary>,
+    val componentHealth: List<ComponentHealthSummary>,
+    val tradingReady: Boolean?,
+    val operatorActionRequired: Boolean?,
+    val brokerPositions: Int?,
+    val brokerOpenOrders: Int?,
+    val reconciliationClean: Boolean?,
+    val unresolvedUnknownIntents: Int?,
+    val unresolvedAmbiguousIntents: Int?,
+    val eodStatus: EodStatusSummary?,
     val recoveryHolds: List<RecoveryHoldSummary>,
     val responsibilities: List<PositionResponsibilitySummary>,
     val postFillRisks: List<PostFillRiskSummary>,

@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.example.markstradingscanner.ui.theme.MarksTradingScannerTheme
 import java.text.NumberFormat
 import java.util.Locale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -95,6 +96,12 @@ private fun HomeScreen(
     var refreshRequest by remember {
         mutableIntStateOf(0)
     }
+    var operationsRefreshRequest by remember {
+        mutableIntStateOf(0)
+    }
+    var refreshing by remember {
+        mutableStateOf(false)
+    }
     var availableUpdate by remember {
         mutableStateOf<AvailableUpdate?>(null)
     }
@@ -109,16 +116,36 @@ private fun HomeScreen(
     }
 
     LaunchedEffect(refreshRequest) {
-        loading = true
+        loading = dashboard == null
+        refreshing = true
         error = null
 
         try {
             dashboard = ScannerApiClient.loadDashboard()
         } catch (exception: Exception) {
             error = exception.message ?: "Unknown connection error"
+            dashboard = dashboard?.copy(
+                operations = OperationsResult(
+                    unavailableReason = error,
+                ),
+            )
         } finally {
             loading = false
+            refreshing = false
         }
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            operationsRefreshRequest += 1
+        }
+    }
+
+    LaunchedEffect(operationsRefreshRequest) {
+        if (operationsRefreshRequest == 0 || dashboard == null) return@LaunchedEffect
+        val operations = ScannerApiClient.loadOperations()
+        dashboard = dashboard?.copy(operations = operations)
     }
 
     Scaffold(
@@ -132,19 +159,17 @@ private fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                Column(
-                    modifier = Modifier.padding(top = 18.dp),
-                ) {
-                    Text(
-                        text = "Mark's Trading Scanner",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-
-                    Text(
-                        text = "Mobile Trading Dashboard",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Column(modifier = Modifier.padding(top = 18.dp)) {
+                    CockpitHeader(
+                        operations = dashboard?.operations ?: OperationsResult(
+                            unavailableReason = if (loading) {
+                                "Loading Operations data"
+                            } else {
+                                error
+                            },
+                        ),
+                        refreshing = refreshing,
+                        onRefresh = { refreshRequest += 1 },
                     )
                 }
             }
@@ -177,25 +202,12 @@ private fun HomeScreen(
             }
 
             when {
-                loading -> {
-                    item {
-                        LoadingCard()
-                    }
-                }
-
-                error != null -> {
-                    item {
-                        ErrorCard(
-                            message = error ?: "Unknown error",
-                            onRetry = {
-                                refreshRequest += 1
-                            },
-                        )
-                    }
-                }
-
                 dashboard != null -> {
                     val data = dashboard!!
+
+                    item {
+                        OperationsCockpit(data.operations)
+                    }
 
                     item {
                         SystemCard(data.system)
@@ -241,6 +253,23 @@ private fun HomeScreen(
                         ) {
                             Text("Refresh All Data")
                         }
+                    }
+                }
+
+                loading -> {
+                    item {
+                        LoadingCard()
+                    }
+                }
+
+                error != null -> {
+                    item {
+                        ErrorCard(
+                            message = error ?: "Unknown error",
+                            onRetry = {
+                                refreshRequest += 1
+                            },
+                        )
                     }
                 }
             }
@@ -579,42 +608,19 @@ private fun UpdateAvailableCard(
 
 @Composable
 private fun OperationsCard(result: OperationsResult) {
-    SectionCard(title = "Operations Status") {
+    SectionCard(title = "Position Safety Details") {
         val operations = result.status
         if (operations == null) {
-            Text(
-                text = "OPERATIONS UNAVAILABLE / STALE",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.error,
-            )
-            Text(
-                text = result.unavailableReason ?: "No current Operations data",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text("CLEAN and READY are not inferred.")
+            Text("Safety details unavailable")
             return@SectionCard
         }
 
-        DashboardMetric("Daily Reliability", operations.dailyReliability.status)
-        DashboardMetric("Trading", if (operations.tradingReady) "READY" else "BLOCKED")
-        DashboardMetric(
-            "Operator Action Required",
-            if (operations.operatorActionRequired) "YES" else "NO",
-        )
-        DashboardMetric("Broker Positions", operations.brokerPositions.toString())
-        DashboardMetric("Broker Open Orders", operations.brokerOpenOrders.toString())
-        DashboardMetric(
-            "Reconciliation",
-            if (operations.reconciliationClean) "CLEAN" else "BLOCKED",
-        )
-
-        val reasons = operations.dailyReliability.failureReasons +
-            operations.dailyReliability.atRiskReasons
-        if (reasons.isNotEmpty()) {
-            HorizontalDivider()
-            Text("Reliability reasons", fontWeight = FontWeight.Bold)
-            reasons.forEach { Text("• ${displayText(it)}") }
+        if (
+            operations.recoveryHolds.isEmpty()
+            && operations.responsibilities.isEmpty()
+            && operations.postFillRisks.isEmpty()
+        ) {
+            Text("No active position safety alerts")
         }
 
         operations.recoveryHolds.forEach { hold ->
