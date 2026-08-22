@@ -679,6 +679,29 @@ object ScannerApiClient {
                 ComponentHealthSummary(
                     component = item.optString("component", "UNKNOWN"),
                     status = item.nullableString("status"),
+                    detail = item.nullableString("detail"),
+                    pid = item.nullableInt("pid"),
+                    instances = item.optJSONArray("instances").objects { instance ->
+                        ProcessInstanceSummary(
+                            pid = instance.nullableInt("pid"),
+                            startedAt = instance.nullableString("started_at"),
+                        )
+                    },
+                    lastSuccessfulUpdate = item.nullableString(
+                        "last_successful_update"
+                    ),
+                )
+            }
+
+        val reconciliationDifferences = synchronization.optJSONArray("differences")
+            .objects { item ->
+                ReconciliationDifferenceSummary(
+                    ticker = item.optString(
+                        "symbol",
+                        item.optString("ticker", "UNKNOWN"),
+                    ),
+                    localQuantity = item.nullableDouble("local_quantity"),
+                    brokerQuantity = item.nullableDouble("broker_quantity"),
                 )
             }
 
@@ -705,20 +728,13 @@ object ScannerApiClient {
                     protectionOwner = item.optString("protection_owner", "UNKNOWN"),
                     requiresOperatorAction = item.optBoolean("requires_operator_action"),
                     blocksNewEntries = item.optBoolean("blocks_new_entries"),
+                    evidenceConfidence = item.nullableString("evidence_confidence"),
+                    brokerQuantity = item.nullableInt("broker_quantity"),
+                    localQuantity = item.nullableInt("local_quantity"),
+                    reasonCodes = item.optJSONArray("reason_codes").strings(),
+                    holdReason = item.nullableString("hold_reason"),
                 )
             }
-        val globalStatus = json.optJSONObject("global_status")
-            ?.nullableString("status")
-        val actionSignal = actionableIncidents.any {
-            it.operatorActionRequired == true
-        } || holds.any { it.requiresOperatorAction }
-            || responsibilities.any { it.requiresOperatorAction }
-        val operatorActionRequired = when {
-            globalStatus.equals("Operator Action Required", ignoreCase = true) -> true
-            actionSignal -> true
-            globalStatus != null -> false
-            else -> null
-        }
         val eod = reliability.optJSONObject("eod_status")
 
         return OperationsStatus(
@@ -735,10 +751,14 @@ object ScannerApiClient {
             actionableIncidents = actionableIncidents,
             componentHealth = componentHealth,
             tradingReady = readiness.nullableBoolean("ready_for_new_entries"),
-            operatorActionRequired = operatorActionRequired,
+            operatorActionRequired = json.nullableBoolean(
+                "operator_action_required"
+            ),
+            readinessReasonCodes = readiness.optJSONArray("reason_codes").strings(),
             brokerPositions = trading.nullableInt("open_positions"),
             brokerOpenOrders = broker.nullableInt("open_orders"),
             reconciliationClean = synchronization.nullableBoolean("synchronized"),
+            reconciliationDifferences = reconciliationDifferences,
             unresolvedUnknownIntents = readiness.nullableInt(
                 "unresolved_unknown_intents"
             ),

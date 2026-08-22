@@ -24,9 +24,20 @@ class OperationsParsingTest {
         assertEquals("TARGET", status.latestTrade?.exitReason)
         assertEquals("CRITICAL", status.actionableIncidents.single().severity)
         assertTrue(status.actionableIncidents.single().operatorActionRequired == true)
+        assertEquals("UNRESOLVED_UNKNOWN_EXECUTION_INTENT", status.actionableIncidents.single().code)
+        assertEquals("POTENTIAL", status.actionableIncidents.single().tradingImpact)
         assertEquals("Healthy", status.componentHealth.first().status)
+        assertEquals("Running", status.componentHealth.first().detail)
+        assertEquals(123, status.componentHealth.first().pid)
+        assertEquals(123, status.componentHealth.first().instances.single().pid)
+        assertEquals("2026-08-22T09:00:00-04:00", status.componentHealth.first().lastSuccessfulUpdate)
         assertTrue(status.tradingReady == true)
+        assertTrue(status.operatorActionRequired == true)
+        assertEquals(listOf("UNRESOLVED_UNKNOWN_INTENT"), status.readinessReasonCodes)
         assertTrue(status.reconciliationClean == true)
+        assertEquals("SUGP", status.reconciliationDifferences.single().ticker)
+        assertEquals(10.0, status.reconciliationDifferences.single().localQuantity ?: 0.0, 0.0)
+        assertEquals(8.0, status.reconciliationDifferences.single().brokerQuantity ?: 0.0, 0.0)
         assertEquals(0, status.unresolvedUnknownIntents)
         assertEquals(0, status.unresolvedAmbiguousIntents)
         assertEquals("POST_CLOSE", status.eodStatus?.phase)
@@ -44,6 +55,9 @@ class OperationsParsingTest {
         assertNull(status.unresolvedUnknownIntents)
         assertNull(status.unresolvedAmbiguousIntents)
         assertNull(status.eodStatus)
+        assertNull(status.operatorActionRequired)
+        assertTrue(status.readinessReasonCodes.isEmpty())
+        assertTrue(status.reconciliationDifferences.isEmpty())
     }
 
     @Test
@@ -52,8 +66,21 @@ class OperationsParsingTest {
             "actionable_incidents",
             JSONArray(),
         ).put("global_status", JSONObject().put("status", "Trading Normally"))
+            .put("operator_action_required", false)
         val status = ScannerApiClient.parseOperations(payload)
         assertTrue(status.actionableIncidents.isEmpty())
+        assertFalse(status.operatorActionRequired ?: true)
+    }
+
+    @Test
+    fun operatorActionUsesBackendVerdictWithoutLocalInference() {
+        val payload = JSONObject(FULL_PAYLOAD).put(
+            "operator_action_required",
+            false,
+        )
+        val status = ScannerApiClient.parseOperations(payload)
+
+        assertTrue(status.actionableIncidents.single().operatorActionRequired == true)
         assertFalse(status.operatorActionRequired ?: true)
     }
 
@@ -98,14 +125,23 @@ class OperationsParsingTest {
                 "summary": "Execution outcome is unknown and must be resolved.",
                 "operator_action_required": true, "trading_impact": "POTENTIAL"
               }],
-              "system_health": [{"component": "Scanner", "status": "Healthy"}],
+              "operator_action_required": true,
+              "system_health": [{
+                "component": "Scanner", "status": "Healthy", "detail": "Running",
+                "pid": 123, "instances": [{"pid": 123, "started_at": "2026-08-22T09:00:00-04:00"}],
+                "last_successful_update": "2026-08-22T09:00:00-04:00"
+              }],
               "trading_readiness": {
                 "ready_for_new_entries": true,
                 "unresolved_unknown_intents": 0,
-                "unresolved_ambiguous_intents": 0
+                "unresolved_ambiguous_intents": 0,
+                "reason_codes": ["UNRESOLVED_UNKNOWN_INTENT"]
               },
               "trading": {"open_positions": 0},
-              "broker": {"open_orders": 0, "synchronization_status": {"synchronized": true}},
+              "broker": {"open_orders": 0, "synchronization_status": {
+                "synchronized": true,
+                "differences": [{"symbol": "SUGP", "local_quantity": 10, "broker_quantity": 8}]
+              }},
               "global_status": {"status": "Operator Action Required"},
               "recovery_hold_surveillance": [],
               "position_responsibilities": [],

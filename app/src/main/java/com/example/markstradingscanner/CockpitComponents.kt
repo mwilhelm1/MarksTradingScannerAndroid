@@ -102,7 +102,10 @@ fun OperationsCockpit(result: OperationsResult) {
     TradingReliabilityCard(operations)
     SafetyCard(operations)
     LatestTradeCard(operations?.latestTrade)
-    AttentionCard(operations?.actionableIncidents)
+    AttentionCard(
+        incidents = operations?.actionableIncidents,
+        responsibilities = operations?.responsibilities,
+    )
 }
 
 @Composable
@@ -125,6 +128,11 @@ private fun PrimaryStatusCard(operations: OperationsStatus?) {
             },
         )
         DashboardMetric("Platform", statusText(operations?.overallStatus))
+        if (operations?.tradingReady == false) {
+            operations.readinessReasonCodes.forEach {
+                Text("- ${displayText(it)}")
+            }
+        }
     }
 }
 
@@ -139,6 +147,19 @@ private fun SystemHealthCard(operations: OperationsStatus?) {
                 val component = components[name.lowercase()]
                 val label = if (name == "Dashboard") "Operations Center" else name
                 DashboardMetric(label, statusText(component?.status))
+                component?.detail?.let { Text(it) }
+                component?.pid?.let { DashboardMetric("$label PID", it.toString()) }
+                if (!component?.instances.isNullOrEmpty()) {
+                    DashboardMetric(
+                        "$label Instances",
+                        component!!.instances.joinToString { instance ->
+                            instance.pid?.toString() ?: "UNKNOWN"
+                        },
+                    )
+                }
+                component?.lastSuccessfulUpdate?.let {
+                    DashboardMetric("$label Last Success", it)
+                }
             }
     }
 }
@@ -201,6 +222,10 @@ private fun SafetyCard(operations: OperationsStatus?) {
                 null -> "UNKNOWN"
             },
         )
+        operations?.reconciliationDifferences.orEmpty().forEach { difference ->
+            Text("${difference.ticker}: local ${difference.localQuantity ?: "UNKNOWN"} / " +
+                "broker ${difference.brokerQuantity ?: "UNKNOWN"}")
+        }
         DashboardMetric(
             "UNKNOWN Intents",
             operations?.unresolvedUnknownIntents?.toString() ?: "UNKNOWN",
@@ -211,6 +236,7 @@ private fun SafetyCard(operations: OperationsStatus?) {
         )
         val eod = operations?.eodStatus
         DashboardMetric("EOD Phase", statusText(eod?.phase))
+        DashboardMetric("EOD Flatness", statusText(eod?.flatness))
         DashboardMetric("EOD Verification", statusText(eod?.verification))
     }
 }
@@ -240,7 +266,10 @@ private fun LatestTradeCard(trade: LatestTradeSummary?) {
 }
 
 @Composable
-private fun AttentionCard(incidents: List<ActionableIncidentSummary>?) {
+private fun AttentionCard(
+    incidents: List<ActionableIncidentSummary>?,
+    responsibilities: List<PositionResponsibilitySummary>?,
+) {
     SectionCard("Attention") {
         when {
             incidents == null -> Text("UNKNOWN — Operations data unavailable")
@@ -256,6 +285,11 @@ private fun AttentionCard(incidents: List<ActionableIncidentSummary>?) {
                     },
                 )
                 Text(incident.summary ?: statusText(incident.code))
+                DashboardMetric("Incident Code", statusText(incident.code))
+                DashboardMetric(
+                    "Trading Impact",
+                    statusText(incident.tradingImpact),
+                )
                 DashboardMetric(
                     "Operator Action",
                     when (incident.operatorActionRequired) {
@@ -266,6 +300,32 @@ private fun AttentionCard(incidents: List<ActionableIncidentSummary>?) {
                 )
             }
         }
+        responsibilities.orEmpty()
+            .filter { it.requiresOperatorAction }
+            .forEach { responsibility ->
+                Text(
+                    "${responsibility.ticker} responsibility evidence",
+                    fontWeight = FontWeight.Bold,
+                )
+                DashboardMetric("State", statusText(responsibility.state))
+                DashboardMetric(
+                    "Protection Owner",
+                    statusText(responsibility.protectionOwner),
+                )
+                DashboardMetric(
+                    "Evidence",
+                    statusText(responsibility.evidenceConfidence),
+                )
+                DashboardMetric(
+                    "Broker / Local Quantity",
+                    "${responsibility.brokerQuantity ?: "UNKNOWN"} / " +
+                        "${responsibility.localQuantity ?: "UNKNOWN"}",
+                )
+                responsibility.holdReason?.let { Text(it) }
+                responsibility.reasonCodes.forEach {
+                    Text("â€¢ ${displayText(it)}")
+                }
+            }
     }
 }
 

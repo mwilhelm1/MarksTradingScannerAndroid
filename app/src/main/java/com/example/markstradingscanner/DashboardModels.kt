@@ -142,6 +142,21 @@ data class ActionableIncidentSummary(
 data class ComponentHealthSummary(
     val component: String,
     val status: String?,
+    val detail: String?,
+    val pid: Int?,
+    val instances: List<ProcessInstanceSummary>,
+    val lastSuccessfulUpdate: String?,
+)
+
+data class ProcessInstanceSummary(
+    val pid: Int?,
+    val startedAt: String?,
+)
+
+data class ReconciliationDifferenceSummary(
+    val ticker: String,
+    val localQuantity: Double?,
+    val brokerQuantity: Double?,
 )
 
 data class EodStatusSummary(
@@ -169,6 +184,11 @@ data class PositionResponsibilitySummary(
     val protectionOwner: String,
     val requiresOperatorAction: Boolean,
     val blocksNewEntries: Boolean,
+    val evidenceConfidence: String?,
+    val brokerQuantity: Int?,
+    val localQuantity: Int?,
+    val reasonCodes: List<String>,
+    val holdReason: String?,
 )
 
 data class PostFillRiskSummary(
@@ -190,9 +210,11 @@ data class OperationsStatus(
     val componentHealth: List<ComponentHealthSummary>,
     val tradingReady: Boolean?,
     val operatorActionRequired: Boolean?,
+    val readinessReasonCodes: List<String>,
     val brokerPositions: Int?,
     val brokerOpenOrders: Int?,
     val reconciliationClean: Boolean?,
+    val reconciliationDifferences: List<ReconciliationDifferenceSummary>,
     val unresolvedUnknownIntents: Int?,
     val unresolvedAmbiguousIntents: Int?,
     val eodStatus: EodStatusSummary?,
