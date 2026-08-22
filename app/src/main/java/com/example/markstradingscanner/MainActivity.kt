@@ -56,14 +56,22 @@ private fun TradingScannerApp() {
     var selectedPosition by remember {
         mutableStateOf<PositionSummary?>(null)
     }
+    var topLevelScreen by remember {
+        mutableStateOf("COCKPIT")
+    }
 
     val position = selectedPosition
 
-    if (position == null) {
+    if (position == null && topLevelScreen == "EVIDENCE") {
+        EvidenceCenterHost(
+            onCockpit = { topLevelScreen = "COCKPIT" },
+        )
+    } else if (position == null) {
         HomeScreen(
             onPositionSelected = {
                 selectedPosition = it
             },
+            onEvidence = { topLevelScreen = "EVIDENCE" },
         )
     } else {
         BackHandler {
@@ -83,6 +91,7 @@ private fun TradingScannerApp() {
 @Composable
 private fun HomeScreen(
     onPositionSelected: (PositionSummary) -> Unit,
+    onEvidence: () -> Unit,
 ) {
     var dashboard by remember {
         mutableStateOf<DashboardData?>(null)
@@ -160,6 +169,11 @@ private fun HomeScreen(
         ) {
             item {
                 Column(modifier = Modifier.padding(top = 18.dp)) {
+                    TopLevelSwitch(
+                        selected = "COCKPIT",
+                        onCockpit = {},
+                        onEvidence = onEvidence,
+                    )
                     CockpitHeader(
                         operations = dashboard?.operations ?: OperationsResult(
                             unavailableReason = if (loading) {

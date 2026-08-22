@@ -51,7 +51,31 @@ object ScannerApiClient {
             }
         }
 
-    private fun requestJson(path: String): JSONObject {
+    suspend fun loadEvidence(forceRefresh: Boolean = false): EvidenceResult =
+        withContext(Dispatchers.IO) {
+            try {
+                val path = if (forceRefresh) {
+                    "/strategy/evidence?force_refresh=true"
+                } else {
+                    "/strategy/evidence"
+                }
+                EvidenceResult(
+                    snapshot = parseEvidence(
+                        requestJson(path, readTimeoutMillis = 30_000)
+                    ),
+                )
+            } catch (exception: Exception) {
+                EvidenceResult(
+                    unavailableReason = exception.message
+                        ?: "Evidence request failed",
+                )
+            }
+        }
+
+    private fun requestJson(
+        path: String,
+        readTimeoutMillis: Int = 15_000,
+    ): JSONObject {
         val baseUrl = BuildConfig.MOBILE_API_BASE_URL.trimEnd('/')
         val apiKey = BuildConfig.MOBILE_API_KEY
 
@@ -71,7 +95,7 @@ object ScannerApiClient {
         try {
             connection.requestMethod = "GET"
             connection.connectTimeout = 10_000
-            connection.readTimeout = 15_000
+            connection.readTimeout = readTimeoutMillis
             connection.setRequestProperty(
                 "X-API-Key",
                 apiKey,
@@ -471,6 +495,120 @@ object ScannerApiClient {
         )
     }
 
+    internal fun parseEvidence(json: JSONObject): EvidenceSnapshot {
+        val status = json.optJSONObject("evidence_status") ?: JSONObject()
+        val overview = json.optJSONObject("overview") ?: JSONObject()
+        val behavior = json.optJSONObject("trade_behavior") ?: JSONObject()
+        val reEntries = json.optJSONObject("re_entries") ?: JSONObject()
+        val sameSession = reEntries.optJSONObject("same_session") ?: JSONObject()
+        val strategy = json.optJSONObject("strategy_intelligence") ?: JSONObject()
+        val cohort = strategy.optJSONObject("cohort") ?: JSONObject()
+        val current = json.optJSONObject("current_strategy") ?: JSONObject()
+        val cleanDays = json.optJSONObject("clean_trading_days") ?: JSONObject()
+        val quality = json.optJSONObject("data_quality") ?: JSONObject()
+
+        return EvidenceSnapshot(
+            generatedAt = json.nullableString("generated_at"),
+            status = EvidenceStatus(
+                state = status.nullableString("state"),
+                authoritativeVerdict = status.nullableString(
+                    "authoritative_verdict"
+                ),
+                independentEvents = status.nullableInt("independent_events"),
+                tradingDays = status.nullableInt("trading_days"),
+                failedGates = status.optJSONArray("failed_gates").strings(),
+                warnings = status.optJSONArray("warnings").strings(),
+                semantics = status.nullableString("semantics"),
+            ),
+            overview = parseEvidencePerformance(overview),
+            sessions = json.optJSONArray("sessions").objects(::parseEvidencePerformance),
+            tradeBehavior = EvidenceTradeBehavior(
+                averageHoldMinutes = behavior.nullableDouble("average_hold_minutes"),
+                averageMfePercent = behavior.nullableDouble("average_mfe_percent"),
+                averageMaePercent = behavior.nullableDouble("average_mae_percent"),
+                captureEfficiency = behavior.optJSONObject("capture_efficiency")?.let {
+                    CaptureEfficiencyEvidence(
+                        label = it.nullableString("label"),
+                        percent = it.nullableDouble("percent"),
+                        sampleSize = it.nullableInt("sample_size"),
+                        semantics = it.nullableString("semantics"),
+                    )
+                },
+            ),
+            exits = json.optJSONArray("exits").objects(::parseEvidencePerformance),
+            reEntries = EvidenceReEntries(
+                scope = reEntries.nullableString("scope"),
+                buckets = reEntries.optJSONArray("buckets")
+                    .objects(::parseEvidencePerformance),
+                sameSessionAvailable = sameSession.nullableBoolean("available"),
+                sameSessionReason = sameSession.nullableString("reason"),
+            ),
+            strategyIntelligence = StrategyIntelligenceEvidence(
+                cohortName = cohort.nullableString("name"),
+                legacyObservations = cohort.nullableInt("legacy_observations"),
+                correctedObservations = cohort.nullableInt("corrected_observations"),
+                correctedOutcomes = cohort.nullableInt("corrected_outcomes"),
+                legacyIncludedInPerformance = cohort.nullableBoolean(
+                    "legacy_included_in_performance"
+                ),
+                setups = strategy.optJSONArray("setups").objects { item ->
+                    SetupEvidence(
+                        setupType = item.optString("setup_type", "UNKNOWN"),
+                        independentEvents = item.nullableInt("independent_events"),
+                        controls = item.nullableInt("controls"),
+                        outcomeCount = item.nullableInt("outcome_count"),
+                        maturityStatus = item.nullableString("maturity_status"),
+                        failedMaturityGates = item.optJSONArray(
+                            "failed_maturity_gates"
+                        ).strings(),
+                    )
+                },
+                warnings = strategy.optJSONArray("warnings").strings(),
+            ),
+            currentStrategy = CurrentStrategyEvidence(
+                tradePlanVersions = current.optJSONArray("trade_plan_versions").strings(),
+                detectorVersion = current.nullableString("detector_version"),
+                outcomeCalculationVersion = current.nullableString(
+                    "outcome_calculation_version"
+                ),
+            ),
+            cleanTradingDays = CleanDayHistoryEvidence(
+                available = cleanDays.nullableBoolean("available"),
+                count = cleanDays.nullableInt("count"),
+                reason = cleanDays.nullableString("reason"),
+            ),
+            dataQuality = EvidenceDataQuality(
+                includedTrades = quality.nullableInt("included_trades"),
+                excludedTrades = quality.nullableInt("excluded_trades"),
+                exclusionReasons = quality.optJSONObject("exclusion_reasons").intMap(),
+                metricSampleSizes = quality.optJSONObject("metric_sample_sizes").intMap(),
+                unclassifiedSessionCount = quality.nullableInt(
+                    "unclassified_session_count"
+                ),
+                cohortLabels = quality.optJSONObject("cohort_labels").stringMap(),
+                warnings = quality.optJSONArray("warnings").strings(),
+            ),
+        )
+    }
+
+    private fun parseEvidencePerformance(json: JSONObject): EvidencePerformance =
+        EvidencePerformance(
+            group = json.nullableString("group"),
+            tradeCount = json.nullableInt("trade_count"),
+            totalClosedTrades = json.nullableInt("total_closed_trades"),
+            eligibleTrades = json.nullableInt("eligible_trades"),
+            excludedTrades = json.nullableInt("excluded_trades"),
+            realizedPl = json.nullableDouble("realized_pl"),
+            winRatePercent = json.nullableDouble("win_rate_percent"),
+            averageWinner = json.nullableDouble("average_winner"),
+            averageLoser = json.nullableDouble("average_loser"),
+            profitFactor = json.nullableString("profit_factor"),
+            averageReturnPercent = json.nullableDouble("average_return_percent"),
+            averageMfePercent = json.nullableDouble("average_mfe_percent"),
+            averageMaePercent = json.nullableDouble("average_mae_percent"),
+            averageHoldMinutes = json.nullableDouble("average_hold_minutes"),
+        )
+
     internal fun parseOperations(json: JSONObject): OperationsStatus {
         val reliability = json.optJSONObject("daily_reliability")
             ?: error("Operations response omitted daily_reliability")
@@ -688,5 +826,15 @@ private fun JSONObject.nullableBoolean(
     }
 
     return optBoolean(name)
+}
+
+private fun JSONObject?.intMap(): Map<String, Int> {
+    if (this == null) return emptyMap()
+    return keys().asSequence().associateWith { key -> optInt(key) }
+}
+
+private fun JSONObject?.stringMap(): Map<String, String> {
+    if (this == null) return emptyMap()
+    return keys().asSequence().associateWith { key -> optString(key) }
 }
 
