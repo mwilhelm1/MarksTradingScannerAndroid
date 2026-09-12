@@ -31,7 +31,7 @@ private val incidentExitReasons = setOf(
 )
 
 @Composable
-fun EvidenceCenterHost(onCockpit: () -> Unit) {
+fun EvidenceCenterHost(onCockpit: () -> Unit, onV2: () -> Unit) {
     var result by remember { mutableStateOf(EvidenceResult()) }
     var refreshRequest by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
@@ -40,7 +40,7 @@ fun EvidenceCenterHost(onCockpit: () -> Unit) {
     LaunchedEffect(refreshRequest) {
         loading = result.snapshot == null
         refreshing = true
-        val loaded = ScannerApiClient.loadEvidence(forceRefresh = refreshRequest > 0)
+        val loaded = ScannerApiClient.loadEvidence(forceRefresh = refreshRequest > 0 && result.snapshot != null)
         result = if (loaded.snapshot == null && result.snapshot != null) {
             result.copy(unavailableReason = loaded.unavailableReason)
         } else {
@@ -55,6 +55,7 @@ fun EvidenceCenterHost(onCockpit: () -> Unit) {
         loading = loading,
         refreshing = refreshing,
         onCockpit = onCockpit,
+        onV2 = onV2,
         onRefresh = { refreshRequest += 1 },
     )
 }
@@ -64,6 +65,7 @@ fun TopLevelSwitch(
     selected: String,
     onCockpit: () -> Unit,
     onEvidence: () -> Unit,
+    onV2: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -87,6 +89,7 @@ fun TopLevelSwitch(
                 Text("Evidence")
             }
         }
+        OutlinedButton(onClick = onV2) { Text("V2 Research") }
     }
 }
 
@@ -96,6 +99,7 @@ fun EvidenceCenterScreen(
     loading: Boolean,
     refreshing: Boolean,
     onCockpit: () -> Unit,
+    onV2: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -116,7 +120,7 @@ fun EvidenceCenterScreen(
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                     )
-                    TopLevelSwitch("EVIDENCE", onCockpit, {})
+                    TopLevelSwitch("EVIDENCE", onCockpit, {}, onV2)
                 }
             }
 

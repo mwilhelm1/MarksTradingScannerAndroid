@@ -59,17 +59,25 @@ object ScannerApiClient {
                 } else {
                     "/strategy/evidence"
                 }
-                EvidenceResult(
-                    snapshot = parseEvidence(
-                        requestJson(path, readTimeoutMillis = 30_000)
-                    ),
-                )
+                val data = requestJson(path)
+                if (data.optBoolean("pending")) {
+                    EvidenceResult(unavailableReason = "Evidence report is building. Tap Refresh shortly.")
+                } else {
+                    EvidenceResult(snapshot = parseEvidence(data), unavailableReason =
+                        if (data.optBoolean("snapshot_stale")) "Cached evidence; refresh pending or unavailable." else null)
+                }
             } catch (exception: Exception) {
                 EvidenceResult(
                     unavailableReason = exception.message
                         ?: "Evidence request failed",
                 )
             }
+        }
+
+    suspend fun loadV2Research(date: String = ""): V2ResearchResult =
+        withContext(Dispatchers.IO) {
+            try { V2ResearchResult(snapshot = requestJson(v2ResearchPath(date))) }
+            catch (_: Exception) { V2ResearchResult(unavailableReason = "V2 request unavailable. Check connection and API version.") }
         }
 
     private fun requestJson(

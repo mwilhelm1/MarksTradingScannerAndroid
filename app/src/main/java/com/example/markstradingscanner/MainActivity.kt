@@ -62,9 +62,12 @@ private fun TradingScannerApp() {
 
     val position = selectedPosition
 
-    if (position == null && topLevelScreen == "EVIDENCE") {
+    if (position == null && topLevelScreen == "V2") {
+        V2ResearchHost(onCockpit = { topLevelScreen = "COCKPIT" }, onEvidence = { topLevelScreen = "EVIDENCE" })
+    } else if (position == null && topLevelScreen == "EVIDENCE") {
         EvidenceCenterHost(
             onCockpit = { topLevelScreen = "COCKPIT" },
+            onV2 = { topLevelScreen = "V2" },
         )
     } else if (position == null) {
         HomeScreen(
@@ -72,6 +75,7 @@ private fun TradingScannerApp() {
                 selectedPosition = it
             },
             onEvidence = { topLevelScreen = "EVIDENCE" },
+            onV2 = { topLevelScreen = "V2" },
         )
     } else {
         BackHandler {
@@ -92,6 +96,7 @@ private fun TradingScannerApp() {
 private fun HomeScreen(
     onPositionSelected: (PositionSummary) -> Unit,
     onEvidence: () -> Unit,
+    onV2: () -> Unit,
 ) {
     var dashboard by remember {
         mutableStateOf<DashboardData?>(null)
@@ -173,6 +178,7 @@ private fun HomeScreen(
                         selected = "COCKPIT",
                         onCockpit = {},
                         onEvidence = onEvidence,
+                        onV2 = onV2,
                     )
                     CockpitHeader(
                         operations = dashboard?.operations ?: OperationsResult(
