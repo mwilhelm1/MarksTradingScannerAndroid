@@ -24,3 +24,18 @@ internal fun v2Time(value: String): String = try {
     java.time.OffsetDateTime.parse(value).atZoneSameInstant(java.time.ZoneId.of("America/New_York"))
         .format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm:ss")) + " ET"
 } catch (_: Exception) { "Unavailable" }
+
+internal fun v2SnapshotFresh(data: JSONObject, nowMillis: Long = System.currentTimeMillis()): Boolean {
+    fun recent(key: String): Boolean = try {
+        val age = nowMillis - java.time.OffsetDateTime.parse(data.getString(key)).toInstant().toEpochMilli()
+        age in 0..15000
+    } catch (_: Exception) { false }
+    return recent("generated_at") && recent("last_heartbeat") && data.optJSONObject("health")?.optBoolean("healthy") == true
+}
+
+internal fun v2Label(code: String): String = code.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+
+internal fun v2Age(data: JSONObject, key: String, nowMillis: Long): String = try {
+    val seconds = (nowMillis - java.time.OffsetDateTime.parse(data.getString(key)).toInstant().toEpochMilli()) / 1000
+    if (seconds < 0) "Unverified timestamp" else "$seconds seconds ago"
+} catch (_: Exception) { "Unavailable" }

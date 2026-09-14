@@ -42,9 +42,9 @@ android {
         minSdk = 26
         targetSdk = 37
         versionCode = configuredValue("ANDROID_VERSION_CODE", "ANDROID_VERSION_CODE")
-            .toIntOrNull() ?: 7
+            .toIntOrNull() ?: 8
         versionName = configuredValue("ANDROID_VERSION_NAME", "ANDROID_VERSION_NAME")
-            .ifBlank { "1.6" }
+            .ifBlank { "1.7" }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -114,3 +114,4 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
+
